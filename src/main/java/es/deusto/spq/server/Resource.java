@@ -119,6 +119,6 @@ public class Resource {
 	@Path("/hello")
 	@Produces(MediaType.TEXT_PLAIN)
 	public Response sayHello() {
-		return Response.ok("Hello world!").build();
+		return Response.ok("Hola buenas!").build();
 	}
 }
