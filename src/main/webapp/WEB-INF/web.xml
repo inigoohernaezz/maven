@@ -9,7 +9,7 @@
         <param-value>es.deusto.spq.server</param-value>
     </init-param>
     <load-on-startup>1</load-on-startup>
-  </servlet>
+  </servlet> 
   <servlet-mapping>
     <servlet-name>example-jersey-jdo-mysql</servlet-name>
     <url-pattern>/rest/*</url-pattern>

@@ -6,13 +6,16 @@ import javax.jdo.Query;
 import javax.jdo.JDOHelper;
 import javax.jdo.Transaction;
 
-import es.deusto.spq.server.jdo.User;
-import es.deusto.spq.server.jdo.Message;
-import es.deusto.spq.pojo.DirectMessage;
-import es.deusto.spq.pojo.MessageData;
-import es.deusto.spq.pojo.UserData;
 
-import javax.ws.rs.GET;
+import es.deusto.spq.pojo.Conductor;
+import es.deusto.spq.server.jdo.ConductorJDO;
+import es.deusto.spq.pojo.Camion;
+import es.deusto.spq.server.jdo.CamionJDO;
+import es.deusto.spq.pojo.Trailer;
+import es.deusto.spq.server.jdo.TrailerJDO;
+
+
+
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
@@ -39,86 +42,104 @@ public class Resource {
 		this.tx = pm.currentTransaction();
 	}
 
-	@POST
-	@Path("/sayMessage")
-	public Response sayMessage(DirectMessage directMessage) {
-		User user = null;
-		try{
-			tx.begin();
-			logger.info("Creating query ...");
-			
-			try (Query<?> q = pm.newQuery("SELECT FROM " + User.class.getName() + " WHERE login == \"" + directMessage.getUserData().getLogin() + "\" &&  password == \"" + directMessage.getUserData().getPassword() + "\"")) {
-				q.setUnique(true);
-				user = (User)q.execute();
-				
-				logger.info("User retrieved: {}", user);
-				if (user != null)  {
-					Message message = new Message(directMessage.getMessageData().getMessage());
-					user.getMessages().add(message);
-					pm.makePersistent(user);					 
-				}
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			tx.commit();
-		} finally {
-			if (tx.isActive()) {
-				tx.rollback();
-			}
-		}
-		
-		if (user != null) {
-			cont++;
-			logger.info(" * Client number: {}", cont);
-			MessageData messageData = new MessageData();
-			messageData.setMessage(directMessage.getMessageData().getMessage());
-			return Response.ok(messageData).build();
-		} else {
-			return Response.status(Status.BAD_REQUEST).entity("Login details supplied for message delivery are not correct").build();
-		}
-	}
-	
-	@POST
-	@Path("/register")
-	public Response registerUser(UserData userData) {
-		try
-        {	
-            tx.begin();
-            logger.info("Checking whether the user already exits or not: '{}'", userData.getLogin());
-			User user = null;
-			try {
-				user = pm.getObjectById(User.class, userData.getLogin());
-			} catch (javax.jdo.JDOObjectNotFoundException jonfe) {
-				logger.info("Exception launched: {}", jonfe.getMessage());
-			}
-			logger.info("User: {}", user);
-			if (user != null) {
-				logger.info("Setting password user: {}", user);
-				user.setPassword(userData.getPassword());
-				logger.info("Password set user: {}", user);
-			} else {
-				logger.info("Creating user: {}", user);
-				user = new User(userData.getLogin(), userData.getPassword());
-				pm.makePersistent(user);					 
-				logger.info("User created: {}", user);
-			}
-			tx.commit();
-			return Response.ok().build();
-        }
-        finally
-        {
-            if (tx.isActive())
-            {
-                tx.rollback();
-            }
-      
-		}
-	}
 
-	@GET
-	@Path("/hello")
-	@Produces(MediaType.TEXT_PLAIN)
-	public Response sayHello() {
-		return Response.ok("Hola buenass!").build();
-	}
+	@POST
+@Path("/registerCamion")
+public Response registrarCamion(Camion camion_nuevo) {
+    try {   
+        tx.begin();
+        logger.info("Comprobando si ya está creado ese camión: '{}'", camion_nuevo.getMatricula());
+        CamionJDO camion = null;
+        try {
+            camion = pm.getObjectById(CamionJDO.class, camion_nuevo.getMatricula());
+        } catch (javax.jdo.JDOObjectNotFoundException jonfe) {
+            logger.info("Exception launched: {}", jonfe.getMessage());
+        }
+        
+        if (camion != null) {
+            logger.info("El camión ya está creado: {}", camion);
+        } else {
+            logger.info("Creando camión: {}", camion_nuevo);
+            // Crear una instancia de TrailerJDO para asociar al camión
+            TrailerJDO trailerJDO = new TrailerJDO(camion_nuevo.getTrailer().getMatricula(), 
+													camion_nuevo.getTrailer().getMarca(),
+													camion_nuevo.getTrailer().getModelo(),
+													camion_nuevo.getTrailer().getCargaMaxima(),
+													camion_nuevo.getTrailer().getTipo());
+            
+											// Crear una instancia de CamionJDO para persistir en la base de datos
+            camion = new CamionJDO(camion_nuevo.getMatricula(), 
+                                   camion_nuevo.getMarca(),
+                                   camion_nuevo.getModelo(),
+                                   camion_nuevo.getPotencia(),
+                                   camion_nuevo.getAutonomia(),
+                                   camion_nuevo.getCargaMaxima(),
+                                   trailerJDO);
+            pm.makePersistent(camion);                     
+            logger.info("Camión creado: {}", camion);
+        }
+        tx.commit();
+        return Response.ok().build();
+    } catch (Exception e) {
+        if (tx.isActive()) {
+            tx.rollback();
+        }
+        logger.error("Error al registrar el camión: {}", e.getMessage());
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                       .entity("Error al registrar el camión")
+                       .build();
+    }
 }
+
+
+	@POST
+@Path("/registerConductor")
+public Response registrarConductor(Conductor conductor_nuevo) {
+    try {   
+        tx.begin();
+        logger.info("Comprobando si ya existe el conductor: '{}'", conductor_nuevo.getDni());
+        ConductorJDO conductor = null;
+        try {
+            conductor = pm.getObjectById(ConductorJDO.class, conductor_nuevo.getDni());
+        } catch (javax.jdo.JDOObjectNotFoundException jonfe) {
+            logger.info("Exception launched: {}", jonfe.getMessage());
+        }
+        logger.info("User: {}", conductor);
+        if (conductor != null) {
+            logger.info("Conductor ya creado: {}", conductor);
+        } else {
+            logger.info("Creando Conductor: {}", conductor_nuevo);
+            // Crear una instancia de ConductorJDO para persistir en la base de datos
+            CamionJDO camionJDO = new CamionJDO(conductor_nuevo.getCamion().getMatricula(), 
+                                                conductor_nuevo.getCamion().getMarca(),
+                                                conductor_nuevo.getCamion().getModelo(),
+                                                conductor_nuevo.getCamion().getPotencia(),
+                                                conductor_nuevo.getCamion().getAutonomia(),
+                                                conductor_nuevo.getCamion().getCargaMaxima(), 
+												null); // Deberías establecer el trailer correctamente
+            conductor = new ConductorJDO(conductor_nuevo.getNombre(), conductor_nuevo.getDni(), 
+                                         conductor_nuevo.getEmail(), camionJDO);
+            pm.makePersistent(conductor);                     
+            logger.info("Conductor creado: {}", conductor);
+        }
+        tx.commit();
+        return Response.ok().build();
+    } catch (Exception e) {
+        if (tx.isActive()) {
+            tx.rollback();
+        }
+        logger.error("Error al registrar el conductor: {}", e.getMessage());
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                       .entity("Error al registrar el conductor")
+                       .build();
+    }
+}
+
+
+}
+
+
+
+
+
+
